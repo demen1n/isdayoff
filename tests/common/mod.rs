@@ -12,6 +12,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 /// What the server saw.
 #[derive(Debug)]
@@ -31,6 +32,20 @@ impl Recorded {
     }
 }
 
+/// How the server answers one connection.
+pub enum Reply {
+    /// A well-formed response with this status and body.
+    Text(u16, &'static str),
+    /// Bytes written to the socket as is (for malformed responses).
+    Raw(Vec<u8>),
+    /// Read the request, then stay silent for a long time (for timeouts).
+    Hang,
+    /// Write these bytes (e.g. headers and part of the body), then go silent.
+    Stall(Vec<u8>),
+    /// Read the request, then close the connection without answering.
+    Close,
+}
+
 pub struct MockServer {
     pub base_url: String,
     requests: mpsc::Receiver<Recorded>,
@@ -39,13 +54,23 @@ pub struct MockServer {
 impl MockServer {
     /// Starts a server that will answer `responses.len()` requests.
     pub fn start(responses: Vec<(u16, &'static str)>) -> Self {
+        Self::start_with(
+            responses
+                .into_iter()
+                .map(|(status, body)| Reply::Text(status, body))
+                .collect(),
+        )
+    }
+
+    /// Like [`start`](Self::start), but with arbitrary replies.
+    pub fn start_with(replies: Vec<Reply>) -> Self {
         // Port 0 means "any free port", so parallel tests don't collide.
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base_url = format!("http://{}/", listener.local_addr().unwrap());
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
-            for (status, body) in responses {
+            for reply in replies {
                 let (mut stream, _) = listener.accept().unwrap();
                 let mut reader = BufReader::new(stream.try_clone().unwrap());
 
@@ -63,16 +88,31 @@ impl MockServer {
                         headers.push((k.trim().to_ascii_lowercase(), v.trim().to_string()));
                     }
                 }
-
-                let response = format!(
-                    "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                    body.len()
-                );
-                stream.write_all(response.as_bytes()).unwrap();
                 let _ = tx.send(Recorded {
                     request_line: request_line.trim_end().to_string(),
                     headers,
                 });
+
+                // Write errors are ignored: the client may legitimately hang up
+                // early (oversized body, timeout).
+                match reply {
+                    Reply::Text(status, body) => {
+                        let response = format!(
+                            "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        );
+                        let _ = stream.write_all(response.as_bytes());
+                    }
+                    Reply::Raw(bytes) => {
+                        let _ = stream.write_all(&bytes);
+                    }
+                    Reply::Hang => thread::sleep(Duration::from_secs(10)),
+                    Reply::Stall(bytes) => {
+                        let _ = stream.write_all(&bytes);
+                        thread::sleep(Duration::from_secs(10));
+                    }
+                    Reply::Close => {}
+                }
             }
         });
 
@@ -85,7 +125,22 @@ impl MockServer {
     /// The next received request.
     pub fn next_request(&self) -> Recorded {
         self.requests
-            .recv_timeout(std::time::Duration::from_secs(5))
+            .recv_timeout(Duration::from_secs(5))
             .expect("server did not receive a request")
     }
+}
+
+/// A 200 response with a `Content-Length` body of `size` zeros.
+pub fn huge_body(size: usize) -> Reply {
+    let mut bytes =
+        format!("HTTP/1.1 200 OK\r\nContent-Length: {size}\r\nConnection: close\r\n\r\n")
+            .into_bytes();
+    bytes.resize(bytes.len() + size, b'0');
+    Reply::Raw(bytes)
+}
+
+/// An address where nothing listens: bind a free port, then release it.
+pub fn dead_url() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    format!("http://{}/", listener.local_addr().unwrap())
 }

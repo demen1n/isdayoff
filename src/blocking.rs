@@ -9,6 +9,8 @@
 //! runtime and panics if created or dropped inside another one.
 //! In async code use [`crate::IsDayOff`].
 
+use std::io::Read;
+
 use chrono::{Month, NaiveDate};
 
 use crate::core::{Config, Query};
@@ -75,9 +77,30 @@ impl IsDayOff {
         let prepared = self.config.prepare(query)?;
         let response = self.http.get(prepared.url.clone()).send()?;
         let status = response.status().as_u16();
-        let body = response.text()?;
+
+        // Not `response.text()`: it buffers the whole body, however large.
+        // `take` stops reading one byte past the limit.
+        let max = prepared.body_limit(status).saturating_add(1);
+        let mut body = Vec::new();
+        response
+            .take(max as u64)
+            .read_to_end(&mut body)
+            .map_err(io_to_error)?;
         prepared.interpret(status, &body)
     }
+}
+
+/// `reqwest::blocking::Response` reports body errors (including timeouts) as
+/// `io::Error` wrapping a `reqwest::Error`; unwrap it so callers see
+/// [`Error::Http`] just like with the async client.
+fn io_to_error(e: std::io::Error) -> Error {
+    if e.get_ref()
+        .is_some_and(|inner| inner.is::<reqwest::Error>())
+    {
+        let inner = e.into_inner().expect("checked by get_ref");
+        return Error::Http(*inner.downcast().expect("checked by is"));
+    }
+    Error::Io(e)
 }
 
 impl IsDayOffBuilder {

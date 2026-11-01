@@ -81,9 +81,20 @@ impl IsDayOff {
 
     async fn fetch(&self, query: Query) -> Result<Vec<Day>, Error> {
         let prepared = self.config.prepare(query)?;
-        let response = self.http.get(prepared.url.clone()).send().await?;
+        let mut response = self.http.get(prepared.url.clone()).send().await?;
         let status = response.status().as_u16();
-        let body = response.text().await?;
+
+        // Not `response.text()`: it buffers the whole body, however large.
+        // Read chunk by chunk and stop one byte past the limit.
+        let max = prepared.body_limit(status).saturating_add(1);
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            let room = max - body.len();
+            body.extend_from_slice(&chunk[..chunk.len().min(room)]);
+            if body.len() == max {
+                break;
+            }
+        }
         prepared.interpret(status, &body)
     }
 }
@@ -119,6 +130,10 @@ impl Default for IsDayOffBuilder {
 impl IsDayOffBuilder {
     /// Alternative service address (default `https://isdayoff.ru/`).
     /// Useful for tests with a local mock server or for a proxy.
+    ///
+    /// Requests go to `<base_url>/api/getdata`; a missing trailing `/` is
+    /// added, so `https://proxy.example/isdayoff` and
+    /// `https://proxy.example/isdayoff/` are equivalent.
     pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = Some(base_url.into());
         self
@@ -183,7 +198,7 @@ impl IsDayOffBuilder {
     pub(crate) fn into_parts(self) -> Result<(Config, String, Duration), Error> {
         let base_url = self.base_url.as_deref().unwrap_or(core::DEFAULT_BASE_URL);
         let config = Config {
-            base_url: url::Url::parse(base_url)?,
+            base_url: core::parse_base_url(base_url)?,
             country: self.country,
             pre: self.pre,
             sd: self.sd,

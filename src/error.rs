@@ -11,6 +11,11 @@ pub enum Error {
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
+    /// Reading the response body failed with an I/O error not coming from
+    /// the HTTP client itself (blocking client only).
+    #[error("failed to read response body: {0}")]
+    Io(#[source] std::io::Error),
+
     /// The address passed to [`IsDayOffBuilder::base_url`](crate::IsDayOffBuilder::base_url)
     /// is not a valid URL.
     #[error("invalid base URL: {0}")]
@@ -39,6 +44,15 @@ pub enum Error {
         status: u16,
         /// Response body (truncated to a reasonable length).
         body: String,
+    },
+
+    /// A successful response is larger than the requested period could
+    /// possibly need, so reading stopped early. Protects against unbounded
+    /// memory use with a misbehaving server or proxy.
+    #[error("response body exceeds {limit} bytes")]
+    ResponseTooLarge {
+        /// Maximum accepted body size in bytes.
+        limit: usize,
     },
 
     /// The response contains an unknown character.

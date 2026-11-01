@@ -3,9 +3,10 @@
 
 mod common;
 
-use common::MockServer;
+use common::{MockServer, Reply, dead_url, huge_body};
 use isdayoff::chrono::{Month, NaiveDate};
 use isdayoff::{Country, DayType, Error, IsDayOff};
+use std::time::Duration;
 
 fn date(y: i32, m: u32, d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, d).unwrap()
@@ -89,4 +90,105 @@ async fn reversed_range_fails_without_network() {
 fn invalid_base_url_is_an_error_not_a_panic() {
     let err = IsDayOff::builder().base_url("not a url").build();
     assert!(matches!(err, Err(Error::InvalidBaseUrl(_))));
+}
+
+#[tokio::test]
+async fn base_url_without_trailing_slash_keeps_prefix() {
+    let server = MockServer::start(vec![(200, "1")]);
+    // "http://127.0.0.1:port/" + "proxy" — no trailing slash.
+    let client = IsDayOff::builder()
+        .base_url(format!("{}proxy", server.base_url))
+        .build()
+        .unwrap();
+    client.day(date(2025, 1, 1)).await.unwrap();
+    assert!(
+        server
+            .next_request()
+            .request_line
+            .starts_with("GET /proxy/api/getdata?")
+    );
+}
+
+#[tokio::test]
+async fn timeout_is_reported() {
+    let server = MockServer::start_with(vec![Reply::Hang]);
+    let client = IsDayOff::builder()
+        .base_url(&server.base_url)
+        .timeout(Duration::from_millis(200))
+        .build()
+        .unwrap();
+    match client.day(date(2025, 1, 1)).await {
+        Err(Error::Http(e)) => assert!(e.is_timeout(), "{e:?}"),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn timeout_while_reading_body() {
+    let server = MockServer::start_with(vec![Reply::Stall(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n1".to_vec(),
+    )]);
+    let client = IsDayOff::builder()
+        .base_url(&server.base_url)
+        .timeout(Duration::from_millis(300))
+        .build()
+        .unwrap();
+    match client.day(date(2025, 1, 1)).await {
+        Err(Error::Http(e)) => assert!(e.is_timeout(), "{e:?}"),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn connection_refused() {
+    let client = IsDayOff::builder().base_url(dead_url()).build().unwrap();
+    match client.day(date(2025, 1, 1)).await {
+        Err(Error::Http(e)) => assert!(e.is_connect(), "{e:?}"),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn connection_closed_without_response() {
+    let server = MockServer::start_with(vec![Reply::Close]);
+    let client = IsDayOff::builder()
+        .base_url(&server.base_url)
+        .build()
+        .unwrap();
+    assert!(matches!(
+        client.day(date(2025, 1, 1)).await,
+        Err(Error::Http(_))
+    ));
+}
+
+#[tokio::test]
+async fn malformed_responses() {
+    let server = MockServer::start_with(vec![
+        Reply::Raw(b"HTTP/1.1 200 OK\r\nContent-Length: abc\r\n\r\n1".to_vec()),
+        Reply::Raw(b"HTTP/1.1 200 OK\r\nBad Header Without Colon\r\n\r\n1".to_vec()),
+        Reply::Raw(b"definitely not http\r\n\r\n".to_vec()),
+        // Body shorter than Content-Length, then the connection closes.
+        Reply::Raw(b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n1".to_vec()),
+    ]);
+    let client = IsDayOff::builder()
+        .base_url(&server.base_url)
+        .build()
+        .unwrap();
+    for i in 0..4 {
+        let res = client.day(date(2025, 1, 1)).await;
+        assert!(matches!(res, Err(Error::Http(_))), "reply #{i}: {res:?}");
+    }
+}
+
+#[tokio::test]
+async fn oversized_body_is_not_buffered() {
+    let server = MockServer::start_with(vec![huge_body(8 * 1024 * 1024)]);
+    let client = IsDayOff::builder()
+        .base_url(&server.base_url)
+        .build()
+        .unwrap();
+    assert!(matches!(
+        client.day(date(2025, 1, 1)).await,
+        Err(Error::ResponseTooLarge { .. })
+    ));
 }
