@@ -2,10 +2,45 @@
 name = "isdayoff"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.86"
+description = "Client for the isdayoff.ru production calendar API: workdays, days off, shortened days and holidays"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/demen1n/isdayoff"
+documentation = "https://docs.rs/isdayoff"
+readme = "README.md"
+keywords = ["calendar", "holidays", "workday", "isdayoff", "russia"]
+categories = ["api-bindings", "date-and-time"]
+# В архив для crates.io кладём только то, что нужно для сборки и документации.
+include = ["src/**/*", "examples/**/*", "tests/**/*", "README.md", "LICENSE-*", "Cargo.toml"]
+
+[features]
+default = ["rustls"]
+# TLS-бэкенд. Нужен ровно один (API работает только по https).
+rustls = ["reqwest/rustls"]
+native-tls = ["reqwest/native-tls"]
+# Синхронный клиент `isdayoff::blocking::IsDayOff`.
+blocking = ["reqwest/blocking"]
 
 [dependencies]
-reqwest = "0.13.2"
-thiserror = "2.0.18"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+reqwest = { version = "0.13", default-features = false }
+thiserror = "2"
+url = "2"
 
 [dev-dependencies]
-tokio = "1.52.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+# Для примеров: `Local::now()` требует фичу `clock`.
+chrono = { version = "0.4", features = ["clock"] }
+
+[package.metadata.docs.rs]
+# docs.rs соберёт документацию со всеми фичами, включая `blocking`.
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "blocking"
+required-features = ["blocking"]
+
+[lints.rust]
+# `docsrs` выставляется только при сборке на docs.rs — объявляем, чтобы не было предупреждения.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(docsrs)"] }

@@ -1,0 +1,92 @@
+//! Тесты async-клиента против локального mock-сервера: проверяем всю цепочку
+//! «билдер → URL → HTTP → разбор ответа», но без интернета.
+
+mod common;
+
+use common::MockServer;
+use isdayoff::chrono::{Month, NaiveDate};
+use isdayoff::{Country, DayType, Error, IsDayOff};
+
+fn date(y: i32, m: u32, d: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+}
+
+#[tokio::test]
+async fn day_request_and_user_agent() {
+    let server = MockServer::start(vec![(200, "8")]);
+    let client = IsDayOff::builder()
+        .base_url(&server.base_url)
+        .holiday(true)
+        .user_agent_comment("tests")
+        .build()
+        .unwrap();
+
+    let kind = client.day(date(2025, 1, 1)).await.unwrap();
+    assert_eq!(kind, DayType::Holiday);
+
+    let req = server.next_request();
+    assert_eq!(
+        req.request_line,
+        "GET /api/getdata?year=2025&month=01&day=01&cc=ru&holiday=1 HTTP/1.1"
+    );
+    let ua = req.header("user-agent").unwrap();
+    assert!(ua.starts_with("isdayoff-rust-lib/"), "{ua}");
+    assert!(ua.ends_with("; tests)"), "{ua}");
+}
+
+#[tokio::test]
+async fn month_maps_dates() {
+    // февраль 2025 — 28 дней
+    let server = MockServer::start(vec![(200, "0000110000011000001100000110")]);
+    let client = IsDayOff::builder()
+        .base_url(&server.base_url)
+        .country(Country::Kazakhstan)
+        .build()
+        .unwrap();
+
+    let days = client.month(2025, Month::February).await.unwrap();
+    assert_eq!(days.len(), 28);
+    assert_eq!(days[0].date, date(2025, 2, 1));
+    assert_eq!(days[27].date, date(2025, 2, 28));
+    assert_eq!(days[4].kind, DayType::DayOff);
+
+    assert!(server.next_request().request_line.contains("cc=kz"));
+}
+
+#[tokio::test]
+async fn api_error_codes() {
+    let server = MockServer::start(vec![(400, "100"), (404, "101"), (200, "1")]);
+    let client = IsDayOff::builder()
+        .base_url(&server.base_url)
+        .build()
+        .unwrap();
+
+    let d = date(2025, 1, 1);
+    assert!(matches!(client.day(d).await, Err(Error::BadRequest)));
+    assert!(matches!(client.day(d).await, Err(Error::NotFound)));
+    // Год ждёт 365 символов, а пришёл один.
+    assert!(matches!(
+        client.year(2025).await,
+        Err(Error::LengthMismatch {
+            expected: 365,
+            actual: 1
+        })
+    ));
+}
+
+#[tokio::test]
+async fn reversed_range_fails_without_network() {
+    // Сервер не запущен вообще: ошибка должна случиться до запроса.
+    let client = IsDayOff::builder()
+        .base_url("http://127.0.0.1:9/")
+        .build()
+        .unwrap();
+    let err = client.range(date(2025, 2, 1), date(2025, 1, 1)).await;
+    assert!(matches!(err, Err(Error::InvalidRange(_))));
+}
+
+#[test]
+fn invalid_base_url_is_an_error_not_a_panic() {
+    let err = IsDayOff::builder().base_url("not a url").build();
+    assert!(matches!(err, Err(Error::InvalidBaseUrl(_))));
+}

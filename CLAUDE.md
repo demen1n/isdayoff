@@ -18,7 +18,13 @@ cargo fmt             # format
 
 ## Architecture
 
-- `src/lib.rs` — crate root (not yet created; will expose the public API)
-- `src/types.rs` — core types (`DayType` enum: `Workday`, `Dayoff`, `Shortened`, `Holiday`)
+- `src/lib.rs` — crate root; modules are private, public API is re-exported via `pub use` (+ `pub use chrono`)
+- `src/types.rs` — `Country`, `DayType` (`Workday`, `DayOff`, `Shortened`, `Covid`, `Holiday`), `Day { date, kind }`
+- `src/error.rs` — `Error` (thiserror, `#[non_exhaustive]`)
+- `src/core.rs` — sans-IO core shared by both clients: `Config::prepare(Query) -> Prepared` builds the URL, `Prepared::interpret(status, body)` parses the response. API errors (100/101/199) are distinguished from data by HTTP status, not body.
+- `src/client.rs` — async `IsDayOff` + `IsDayOffBuilder` (timeout, User-Agent `isdayoff-rust-lib/<ver> (...)`)
+- `src/blocking.rs` — `blocking::IsDayOff`, behind feature `blocking`; built via `IsDayOffBuilder::build_blocking()`
+- `tests/` — mock HTTP server in `tests/common/mod.rs`; `tests/live.rs` hits the real API and is `#[ignore]`d (`cargo test --test live -- --ignored`)
+- `edu/` — personal learning notes in Russian, git-ignored (local only); add a new numbered lesson when introducing a notable concept
 
-The library will need an HTTP client dependency (e.g. `reqwest`) to call the isdayoff.ru REST API. The API returns single-character or multi-character digit strings indicating day types for a given date or date range.
+Features: `rustls` (default), `native-tls`, `blocking`. Always check with `cargo test --all-features` and `cargo build --no-default-features`.
