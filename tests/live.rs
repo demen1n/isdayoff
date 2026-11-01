@@ -1,7 +1,7 @@
-//! Тесты против настоящего isdayoff.ru. По умолчанию пропускаются (`#[ignore]`),
-//! чтобы `cargo test` не зависел от сети и не нагружал чужой сервис.
+//! Tests against the real isdayoff.ru. Skipped by default (`#[ignore]`) so
+//! `cargo test` doesn't depend on the network or load someone else's service.
 //!
-//! Запуск: `cargo test --test live -- --ignored`
+//! Run: `cargo test --test live -- --ignored`
 
 use isdayoff::chrono::{Month, NaiveDate};
 use isdayoff::{DayType, Error, IsDayOff};
@@ -30,7 +30,7 @@ async fn new_year_is_holiday() {
 async fn april_30_2025_is_shortened() {
     let days = client().month(2025, Month::April).await.unwrap();
     assert_eq!(days.len(), 30);
-    // 30 апреля 2025 — сокращённый предпраздничный день.
+    // April 30, 2025 is a shortened pre-holiday day.
     assert_eq!(days[29].kind, DayType::Shortened);
 }
 

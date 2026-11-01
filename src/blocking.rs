@@ -1,21 +1,21 @@
-//! Синхронный (блокирующий) клиент. Доступен с фичей `blocking`.
+//! Synchronous (blocking) client. Requires the `blocking` feature.
 //!
 //! ```toml
 //! isdayoff = { version = "0.1", features = ["blocking"] }
 //! ```
 //!
-//! **Важно:** не используйте этот клиент внутри async-кода (внутри
-//! `#[tokio::main]` и т.п.). `reqwest::blocking` сам поднимает внутренний
-//! рантайм и паникует, если его создать или уронить внутри чужого.
-//! В async-коде берите [`crate::IsDayOff`].
+//! **Important:** do not use this client inside async code (inside
+//! `#[tokio::main]` etc.). `reqwest::blocking` spins up its own internal
+//! runtime and panics if created or dropped inside another one.
+//! In async code use [`crate::IsDayOff`].
 
 use chrono::{Month, NaiveDate};
 
 use crate::core::{Config, Query};
 use crate::{Day, DayType, Error, IsDayOffBuilder};
 
-/// Синхронный клиент isdayoff.ru. Методы те же, что у [`crate::IsDayOff`],
-/// только без `async`.
+/// Synchronous isdayoff.ru client. Same methods as [`crate::IsDayOff`],
+/// just without `async`.
 ///
 /// ```no_run
 /// use isdayoff::{blocking::IsDayOff, chrono::NaiveDate};
@@ -23,7 +23,7 @@ use crate::{Day, DayType, Error, IsDayOffBuilder};
 /// let client = IsDayOff::new()?;
 /// let today = NaiveDate::from_ymd_opt(2025, 1, 9).unwrap();
 /// if client.day(today)?.is_working() {
-///     println!("на работу");
+///     println!("off to work");
 /// }
 /// # Ok::<(), isdayoff::Error>(())
 /// ```
@@ -34,18 +34,18 @@ pub struct IsDayOff {
 }
 
 impl IsDayOff {
-    /// Клиент с настройками по умолчанию.
+    /// A client with default settings.
     pub fn new() -> Result<Self, Error> {
         IsDayOffBuilder::default().build_blocking()
     }
 
-    /// Билдер (тот же, что у async-клиента; в конце вызовите
+    /// The builder (shared with the async client; finish with
     /// [`build_blocking`](IsDayOffBuilder::build_blocking)).
     pub fn builder() -> IsDayOffBuilder {
         IsDayOffBuilder::default()
     }
 
-    /// Тип одного дня.
+    /// The type of a single day.
     pub fn day(&self, date: NaiveDate) -> Result<DayType, Error> {
         match self.fetch(Query::Day(date))?.as_slice() {
             [day] => Ok(day.kind),
@@ -56,17 +56,17 @@ impl IsDayOff {
         }
     }
 
-    /// Все дни месяца.
+    /// All days of a month.
     pub fn month(&self, year: i32, month: Month) -> Result<Vec<Day>, Error> {
         self.fetch(Query::Month { year, month })
     }
 
-    /// Все дни года.
+    /// All days of a year.
     pub fn year(&self, year: i32) -> Result<Vec<Day>, Error> {
         self.fetch(Query::Year(year))
     }
 
-    /// Дни с `from` по `to` включительно.
+    /// Days from `from` to `to`, inclusive.
     pub fn range(&self, from: NaiveDate, to: NaiveDate) -> Result<Vec<Day>, Error> {
         self.fetch(Query::Range { from, to })
     }
@@ -81,7 +81,7 @@ impl IsDayOff {
 }
 
 impl IsDayOffBuilder {
-    /// Собирает синхронный клиент.
+    /// Builds the synchronous client.
     pub fn build_blocking(self) -> Result<IsDayOff, Error> {
         let (config, user_agent, timeout) = self.into_parts()?;
         let http = reqwest::blocking::Client::builder()

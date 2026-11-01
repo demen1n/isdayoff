@@ -1,4 +1,4 @@
-//! Предметные типы: страна, тип дня, день с датой.
+//! Domain types: country, day type, dated day.
 
 use std::fmt;
 
@@ -6,29 +6,29 @@ use chrono::NaiveDate;
 
 use crate::Error;
 
-/// Страна, для которой запрашивается производственный календарь (параметр `cc`).
+/// Country whose production calendar is requested (the `cc` parameter).
 ///
-/// Перечислены не все страны, которые знает isdayoff.ru: у Турции, США и
-/// Латвии данные заканчиваются на 2022 году, поэтому они не поддерживаются.
+/// Not every country known to isdayoff.ru is listed: data for Turkey, the USA
+/// and Latvia ends in 2022, so they are not supported.
 ///
-/// Перечисление помечено `#[non_exhaustive]`: добавление новой страны в
-/// будущей версии не сломает чужой код с `match`.
+/// The enum is `#[non_exhaustive]`: adding a country in a future version
+/// won't break downstream `match` expressions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
 pub enum Country {
-    /// Россия (`ru`) — значение по умолчанию.
+    /// Russia (`ru`), the default.
     #[default]
     Russia,
-    /// Беларусь (`by`).
+    /// Belarus (`by`).
     Belarus,
-    /// Казахстан (`kz`).
+    /// Kazakhstan (`kz`).
     Kazakhstan,
-    /// Узбекистан (`uz`).
+    /// Uzbekistan (`uz`).
     Uzbekistan,
 }
 
 impl Country {
-    /// Двухбуквенный код страны (ISO 3166-1 alpha-2), как его ждёт API.
+    /// Two-letter country code (ISO 3166-1 alpha-2) as expected by the API.
     pub fn code(self) -> &'static str {
         match self {
             Country::Russia => "ru",
@@ -45,29 +45,29 @@ impl fmt::Display for Country {
     }
 }
 
-/// Тип дня — один символ ответа API.
+/// Day type — a single character of the API response.
 ///
-/// Варианты [`Shortened`](DayType::Shortened), [`Covid`](DayType::Covid) и
-/// [`Holiday`](DayType::Holiday) приходят **только** если включён
-/// соответствующий флаг в билдере (`pre`, `covid`, `holiday`); без флага
-/// такие дни приходят как обычные `Workday`/`DayOff`.
+/// [`Shortened`](DayType::Shortened), [`Covid`](DayType::Covid) and
+/// [`Holiday`](DayType::Holiday) are returned **only** when the matching
+/// builder flag (`pre`, `covid`, `holiday`) is enabled; otherwise such days
+/// come back as plain `Workday`/`DayOff`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum DayType {
-    /// `0` — рабочий день.
+    /// `0` — a working day.
     Workday,
-    /// `1` — выходной (нерабочий) день.
+    /// `1` — a day off (non-working day).
     DayOff,
-    /// `2` — сокращённый предпраздничный рабочий день (флаг `pre`).
+    /// `2` — a shortened pre-holiday working day (`pre` flag).
     Shortened,
-    /// `4` — нерабочий день из-за COVID-19, только 2020 год (флаг `covid`).
+    /// `4` — a COVID-19 non-working day, 2020 only (`covid` flag).
     Covid,
-    /// `8` — праздничный день (флаг `holiday`).
+    /// `8` — a public holiday (`holiday` flag).
     Holiday,
 }
 
 impl DayType {
-    /// Разбирает один символ ответа API.
+    /// Parses a single character of the API response.
     pub fn from_char(c: char) -> Result<Self, Error> {
         match c {
             '0' => Ok(DayType::Workday),
@@ -79,12 +79,12 @@ impl DayType {
         }
     }
 
-    /// Нужно ли в этот день работать (рабочий или сокращённый день).
+    /// Whether this is a working day (regular or shortened).
     pub fn is_working(self) -> bool {
         matches!(self, DayType::Workday | DayType::Shortened)
     }
 
-    /// Нерабочий ли это день (выходной, праздник, «ковидный» день).
+    /// Whether this is a non-working day (day off, holiday, COVID day).
     pub fn is_day_off(self) -> bool {
         !self.is_working()
     }
@@ -102,12 +102,12 @@ impl fmt::Display for DayType {
     }
 }
 
-/// Конкретная дата и её тип.
+/// A specific date and its type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Day {
-    /// Дата.
+    /// The date.
     pub date: NaiveDate,
-    /// Тип дня.
+    /// The day type.
     pub kind: DayType,
 }
 

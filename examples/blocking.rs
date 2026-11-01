@@ -1,4 +1,4 @@
-//! Запуск: `cargo run --example blocking --features blocking`
+//! Run: `cargo run --example blocking --features blocking`
 
 use isdayoff::blocking::IsDayOff;
 use isdayoff::chrono::{Days, Local};

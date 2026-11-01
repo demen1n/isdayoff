@@ -1,10 +1,9 @@
-//! Клиент API производственного календаря [isdayoff.ru](https://isdayoff.ru/).
+//! Client for the [isdayoff.ru](https://isdayoff.ru/) production calendar API.
 //!
-//! Позволяет узнать, является ли дата рабочим днём, выходным, сокращённым
-//! предпраздничным днём или праздником — для России, Беларуси, Казахстана
-//! и Узбекистана.
+//! Tells whether a date is a working day, a day off, a shortened pre-holiday
+//! day or a public holiday — for Russia, Belarus, Kazakhstan and Uzbekistan.
 //!
-//! # Быстрый старт
+//! # Quick start
 //!
 //! ```no_run
 //! use isdayoff::{IsDayOff, chrono::NaiveDate};
@@ -18,21 +17,21 @@
 //!
 //!     let date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
 //!     let kind = client.day(date).await?;
-//!     println!("{date}: {kind}, работаем: {}", kind.is_working());
+//!     println!("{date}: {kind}, working: {}", kind.is_working());
 //!     Ok(())
 //! }
 //! ```
 //!
-//! # Фичи
+//! # Features
 //!
-//! | фича         | по умолчанию | что даёт                                         |
-//! |--------------|:------------:|--------------------------------------------------|
-//! | `rustls`     | да           | TLS на чистом Rust                               |
-//! | `native-tls` | нет          | системный TLS (OpenSSL / Secure Transport / SChannel) |
-//! | `blocking`   | нет          | синхронный клиент [`blocking::IsDayOff`]         |
+//! | feature      | default | description                                      |
+//! |--------------|:-------:|--------------------------------------------------|
+//! | `rustls`     | yes     | pure-Rust TLS                                    |
+//! | `native-tls` | no      | system TLS (OpenSSL / Secure Transport / SChannel) |
+//! | `blocking`   | no      | synchronous client [`blocking::IsDayOff`]        |
 //!
-//! Async-клиент не привязан к конкретному рантайму в API, но `reqwest`
-//! под капотом использует `tokio`, поэтому вызывайте его из tokio-рантайма.
+//! The async client's API isn't tied to a particular runtime, but `reqwest`
+//! uses `tokio` under the hood, so call it from within a tokio runtime.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_docs)]
@@ -50,6 +49,6 @@ pub use client::{IsDayOff, IsDayOffBuilder};
 pub use error::Error;
 pub use types::{Country, Day, DayType};
 
-/// Реэкспорт `chrono`: даты в API крейта — это `chrono::NaiveDate` и
-/// `chrono::Month`. Так пользователю не нужно подбирать совместимую версию.
+/// Re-export of `chrono`: dates in this crate's API are `chrono::NaiveDate`
+/// and `chrono::Month`, so users don't have to pick a compatible version.
 pub use chrono;

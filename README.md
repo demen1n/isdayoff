@@ -3,18 +3,20 @@
 [![crates.io](https://img.shields.io/crates/v/isdayoff.svg)](https://crates.io/crates/isdayoff)
 [![docs.rs](https://docs.rs/isdayoff/badge.svg)](https://docs.rs/isdayoff)
 
-Rust-клиент API производственного календаря [isdayoff.ru](https://isdayoff.ru/):
-рабочие дни, выходные, сокращённые предпраздничные дни и праздники для России,
-Беларуси, Казахстана и Узбекистана.
+**English** | [Русский](README.ru.md)
+
+Rust client for the [isdayoff.ru](https://isdayoff.ru/) production calendar API:
+workdays, days off, shortened pre-holiday days and public holidays for Russia,
+Belarus, Kazakhstan and Uzbekistan.
 
 ```toml
 [dependencies]
 isdayoff = "0.1"
-# синхронный клиент:
+# synchronous client:
 # isdayoff = { version = "0.1", features = ["blocking"] }
 ```
 
-## Пример
+## Example
 
 ```rust,no_run
 use isdayoff::{IsDayOff, chrono::{Month, NaiveDate}};
@@ -22,47 +24,50 @@ use isdayoff::{IsDayOff, chrono::{Month, NaiveDate}};
 #[tokio::main]
 async fn main() -> Result<(), isdayoff::Error> {
     let client = IsDayOff::builder()
-        .pre(true)        // сокращённые дни -> DayType::Shortened
-        .holiday(true)    // праздники -> DayType::Holiday
+        .pre(true)        // shortened days -> DayType::Shortened
+        .holiday(true)    // holidays -> DayType::Holiday
         .user_agent_comment("my-app, me@example.com")
         .build()?;
 
     let kind = client.day(NaiveDate::from_ymd_opt(2025, 1, 1).unwrap()).await?;
-    println!("1 января: {kind}");
+    println!("January 1st: {kind}");
 
     let may = client.month(2025, Month::May).await?;
     let working = may.iter().filter(|d| d.kind.is_working()).count();
-    println!("в мае 2025 рабочих дней: {working}");
+    println!("working days in May 2025: {working}");
     Ok(())
 }
 ```
 
-Методы клиента: `day`, `month`, `year`, `range(from, to)`.
+Client methods: `day`, `month`, `year`, `range(from, to)`.
 
-## Фичи
+## Features
 
-| фича         | по умолчанию | описание |
+| feature      | default | description |
 |--------------|:---:|---|
-| `rustls`     | ✓ | TLS на чистом Rust |
-| `native-tls` |   | системный TLS |
-| `blocking`   |   | синхронный клиент `isdayoff::blocking::IsDayOff` |
+| `rustls`     | ✓ | pure-Rust TLS |
+| `native-tls` |   | system TLS |
+| `blocking`   |   | synchronous client `isdayoff::blocking::IsDayOff` |
 
 ## User-Agent
 
-По просьбе автора сервиса клиент отправляет заголовок
-`User-Agent: isdayoff-rust-lib/<версия> (+https://github.com/demen1n/isdayoff; <комментарий>)`.
-Комментарий задаётся через `.user_agent_comment(...)` — укажите там, как с вами связаться.
+As requested by the service author, the client sends
+`User-Agent: isdayoff-rust-lib/<version> (+https://github.com/demen1n/isdayoff; <comment>)`.
+Set the comment with `.user_agent_comment(...)` — put your contact info there.
 
-## Разработка
+## Development
 
 ```sh
-cargo test --all-features                 # unit + тесты с mock-сервером, без сети
-cargo test --test live -- --ignored       # против настоящего isdayoff.ru
+cargo test --all-features                 # unit + mock-server tests, no network
+cargo test --test live -- --ignored       # against the real isdayoff.ru
 cargo run --example async
 cargo run --example blocking --features blocking
 ```
 
+## License
 
-## Лицензия
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
 
-MIT или Apache-2.0 на ваш выбор.
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

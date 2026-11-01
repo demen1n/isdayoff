@@ -1,8 +1,9 @@
-//! «Ядро без ввода-вывода» (sans-IO): всё, что можно сделать без сети.
+//! Sans-IO core: everything that can be done without the network.
 //!
-//! Async- и blocking-клиенты отличаются только тем, *как* они отправляют
-//! HTTP-запрос. Построение URL и разбор ответа одинаковы, поэтому живут здесь
-//! и тестируются обычными синхронными unit-тестами, без сервера и рантайма.
+//! The async and blocking clients differ only in *how* they send the HTTP
+//! request. Building the URL and parsing the response are identical, so they
+//! live here and are covered by plain synchronous unit tests — no server,
+//! no runtime.
 
 use chrono::{Month, Months, NaiveDate};
 use url::Url;
@@ -11,7 +12,7 @@ use crate::{Country, Day, DayType, Error};
 
 pub(crate) const DEFAULT_BASE_URL: &str = "https://isdayoff.ru/";
 
-/// Настройки запросов, общие для async- и blocking-клиента.
+/// Request settings shared by the async and blocking clients.
 #[derive(Debug, Clone)]
 pub(crate) struct Config {
     pub(crate) base_url: Url,
@@ -22,7 +23,7 @@ pub(crate) struct Config {
     pub(crate) holiday: bool,
 }
 
-/// Что именно спрашиваем у API.
+/// What exactly we ask the API for.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Query {
     Day(NaiveDate),
@@ -31,18 +32,18 @@ pub(crate) enum Query {
     Range { from: NaiveDate, to: NaiveDate },
 }
 
-/// Готовый к отправке запрос + то, что нужно знать для разбора ответа.
+/// A request ready to be sent, plus what is needed to parse its response.
 #[derive(Debug)]
 pub(crate) struct Prepared {
     pub(crate) url: Url,
-    /// Первая дата периода — к ней «привязываем» первый символ ответа.
+    /// First date of the period; the first character of the response maps to it.
     first: NaiveDate,
-    /// Сколько дней (символов) должно прийти.
+    /// How many days (characters) the response must contain.
     len: usize,
 }
 
 impl Query {
-    /// Первый и последний день периода (включительно).
+    /// First and last day of the period (inclusive).
     fn span(self) -> Result<(NaiveDate, NaiveDate), Error> {
         const OUT_OF_RANGE: Error = Error::InvalidRange("date is out of supported range");
 
@@ -51,7 +52,7 @@ impl Query {
             Query::Month { year, month } => {
                 let first = NaiveDate::from_ymd_opt(year, month.number_from_month(), 1)
                     .ok_or(OUT_OF_RANGE)?;
-                // Последний день месяца = (первое число следующего месяца) - 1 день.
+                // Last day of the month = (first day of the next month) - 1 day.
                 let last = first
                     .checked_add_months(Months::new(1))
                     .and_then(|d| d.pred_opt())
@@ -72,19 +73,19 @@ impl Query {
 }
 
 impl Config {
-    /// Строит URL запроса и запоминает, сколько дней ждать в ответе.
+    /// Builds the request URL and records how many days to expect back.
     pub(crate) fn prepare(&self, query: Query) -> Result<Prepared, Error> {
         let (first, last) = query.span()?;
-        // `num_days()` — i64; период из `span()` никогда не отрицательный.
+        // `num_days()` is i64; the period from `span()` is never negative.
         let len = usize::try_from((last - first).num_days() + 1)
             .map_err(|_| Error::InvalidRange("period is too long"))?;
 
-        // Относительный путь без ведущего `/`: если base_url = "http://proxy/isdayoff/",
-        // получится ".../isdayoff/api/getdata", а не "http://proxy/api/getdata".
+        // Relative path without a leading `/`: with base_url = "http://proxy/isdayoff/"
+        // this yields ".../isdayoff/api/getdata", not "http://proxy/api/getdata".
         let mut url = self.base_url.join("api/getdata")?;
 
-        // `q` держит `&mut url` и имеет деструктор (Drop): заимствование живёт до
-        // конца области видимости `q`, поэтому — отдельный блок.
+        // `q` holds `&mut url` and implements Drop, so the borrow lasts until the
+        // end of `q`'s scope — hence the separate block.
         {
             let mut q = url.query_pairs_mut();
             match query {
@@ -123,12 +124,12 @@ impl Config {
 }
 
 impl Prepared {
-    /// Превращает HTTP-статус и тело ответа в список дней.
+    /// Turns the HTTP status and response body into a list of days.
     ///
-    /// Почему нужен статус, а не только тело: ответ за диапазон из трёх дней
-    /// легально может быть строкой `"100"` (рабочий, выходной, выходной) —
-    /// ровно как код ошибки «неверная дата». Отличить их можно только по
-    /// HTTP-статусу: данные приходят с `200`, ошибки — с `400`/`404`/...
+    /// Why the status matters and not just the body: a response for a
+    /// three-day range can legitimately be `"100"` (day off, workday, workday),
+    /// exactly like the "bad date" error code. Only the HTTP status tells them
+    /// apart: data comes with `200`, errors with `400`/`404`/...
     pub(crate) fn interpret(&self, status: u16, body: &str) -> Result<Vec<Day>, Error> {
         let body = body.trim();
 
@@ -148,8 +149,8 @@ impl Prepared {
     }
 
     fn parse_days(&self, body: &str) -> Result<Vec<Day>, Error> {
-        // Считаем символы, а не байты (`len()`): так ошибка будет честной,
-        // даже если сервер вдруг пришлёт не-ASCII.
+        // Count chars, not bytes (`len()`), so the error stays accurate even if
+        // the server unexpectedly sends non-ASCII.
         let actual = body.chars().count();
         if actual != self.len {
             return Err(Error::LengthMismatch {
@@ -158,9 +159,9 @@ impl Prepared {
             });
         }
 
-        // `iter_days()` — бесконечный итератор дат, начиная с `first`;
-        // `zip` остановится, когда закончатся символы ответа.
-        // `collect::<Result<Vec<_>, _>>()` прервётся на первой ошибке.
+        // `iter_days()` is an infinite iterator of dates starting at `first`;
+        // `zip` stops when the response characters run out.
+        // `collect::<Result<Vec<_>, _>>()` short-circuits on the first error.
         body.chars()
             .zip(self.first.iter_days())
             .map(|(c, date)| {
@@ -173,10 +174,10 @@ impl Prepared {
     }
 }
 
-/// Значение заголовка `User-Agent` в формате, о котором просит автор API:
-/// `isdayoff-<язык>-lib/<версия> (<комментарий>)`.
+/// `User-Agent` header value in the format requested by the API author:
+/// `isdayoff-<language>-lib/<version> (<comment>)`.
 pub(crate) fn user_agent(comment: Option<&str>) -> String {
-    // `env!` подставляет значения из Cargo.toml на этапе компиляции.
+    // `env!` substitutes values from Cargo.toml at compile time.
     let version = env!("CARGO_PKG_VERSION");
     let repo = env!("CARGO_PKG_REPOSITORY");
     match comment {
@@ -232,7 +233,7 @@ mod tests {
             p.url.as_str(),
             "https://isdayoff.ru/api/getdata?year=2024&month=02&cc=by&pre=1&holiday=1"
         );
-        assert_eq!(p.len, 29, "2024 — високосный");
+        assert_eq!(p.len, 29, "2024 is a leap year");
     }
 
     #[test]
@@ -247,7 +248,7 @@ mod tests {
             p.url.as_str(),
             "https://isdayoff.ru/api/getdata?date1=20251230&date2=20260102&cc=ru"
         );
-        assert_eq!(p.len, 4, "границы включительно");
+        assert_eq!(p.len, 4, "bounds are inclusive");
     }
 
     #[test]

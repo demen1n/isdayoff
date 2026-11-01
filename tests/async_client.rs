@@ -1,5 +1,5 @@
-//! Тесты async-клиента против локального mock-сервера: проверяем всю цепочку
-//! «билдер → URL → HTTP → разбор ответа», но без интернета.
+//! Async client tests against a local mock server: the whole chain
+//! "builder → URL → HTTP → response parsing", without the internet.
 
 mod common;
 
@@ -36,7 +36,7 @@ async fn day_request_and_user_agent() {
 
 #[tokio::test]
 async fn month_maps_dates() {
-    // февраль 2025 — 28 дней
+    // February 2025 has 28 days
     let server = MockServer::start(vec![(200, "0000110000011000001100000110")]);
     let client = IsDayOff::builder()
         .base_url(&server.base_url)
@@ -64,7 +64,7 @@ async fn api_error_codes() {
     let d = date(2025, 1, 1);
     assert!(matches!(client.day(d).await, Err(Error::BadRequest)));
     assert!(matches!(client.day(d).await, Err(Error::NotFound)));
-    // Год ждёт 365 символов, а пришёл один.
+    // A year expects 365 characters but only one arrived.
     assert!(matches!(
         client.year(2025).await,
         Err(Error::LengthMismatch {
@@ -76,7 +76,7 @@ async fn api_error_codes() {
 
 #[tokio::test]
 async fn reversed_range_fails_without_network() {
-    // Сервер не запущен вообще: ошибка должна случиться до запроса.
+    // No server at all: the error must happen before any request.
     let client = IsDayOff::builder()
         .base_url("http://127.0.0.1:9/")
         .build()

@@ -1,4 +1,4 @@
-//! Асинхронный клиент и билдер.
+//! Async client and builder.
 
 use std::time::Duration;
 
@@ -7,15 +7,14 @@ use chrono::{Month, NaiveDate};
 use crate::core::{self, Config, Query};
 use crate::{Country, Day, DayType, Error};
 
-/// Таймаут по умолчанию. Без него запрос может висеть бесконечно:
-/// например, isdayoff.ru не отвечает вовсе на неизвестный код страны.
+/// Default timeout. Without one a request may hang forever: for example,
+/// isdayoff.ru never answers a request with an unknown country code.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Асинхронный клиент isdayoff.ru.
+/// Async isdayoff.ru client.
 ///
-/// Клиент дёшево клонируется (`reqwest::Client` внутри — это `Arc`), поэтому
-/// создавайте его один раз и передавайте копии, а не собирайте заново на
-/// каждый запрос.
+/// Cloning is cheap (the inner `reqwest::Client` is an `Arc`), so build the
+/// client once and pass clones around instead of rebuilding it per request.
 ///
 /// ```no_run
 /// use isdayoff::{IsDayOff, chrono::{Month, NaiveDate}};
@@ -39,21 +38,21 @@ pub struct IsDayOff {
 }
 
 impl IsDayOff {
-    /// Клиент с настройками по умолчанию (Россия, без доп. флагов).
+    /// A client with default settings (Russia, no extra flags).
     pub fn new() -> Result<Self, Error> {
         Self::builder().build()
     }
 
-    /// Билдер для настройки клиента.
+    /// A builder for configuring the client.
     pub fn builder() -> IsDayOffBuilder {
         IsDayOffBuilder::default()
     }
 
-    /// Тип одного дня.
+    /// The type of a single day.
     pub async fn day(&self, date: NaiveDate) -> Result<DayType, Error> {
         let days = self.fetch(Query::Day(date)).await?;
-        // Длину ответа уже проверил `interpret`, но вместо `days[0]`
-        // (потенциальная паника) честно сопоставляем с образцом.
+        // `interpret` has already checked the length, but instead of `days[0]`
+        // (a potential panic) we match on the slice pattern.
         match days.as_slice() {
             [day] => Ok(day.kind),
             other => Err(Error::LengthMismatch {
@@ -63,19 +62,19 @@ impl IsDayOff {
         }
     }
 
-    /// Все дни месяца.
+    /// All days of a month.
     pub async fn month(&self, year: i32, month: Month) -> Result<Vec<Day>, Error> {
         self.fetch(Query::Month { year, month }).await
     }
 
-    /// Все дни года (365 или 366).
+    /// All days of a year (365 or 366).
     pub async fn year(&self, year: i32) -> Result<Vec<Day>, Error> {
         self.fetch(Query::Year(year)).await
     }
 
-    /// Дни с `from` по `to` включительно.
+    /// Days from `from` to `to`, inclusive.
     ///
-    /// Возвращает [`Error::InvalidRange`], если `from > to`.
+    /// Returns [`Error::InvalidRange`] if `from > to`.
     pub async fn range(&self, from: NaiveDate, to: NaiveDate) -> Result<Vec<Day>, Error> {
         self.fetch(Query::Range { from, to }).await
     }
@@ -89,7 +88,7 @@ impl IsDayOff {
     }
 }
 
-/// Билдер клиента. Все флаги по умолчанию выключены — как и в самом API.
+/// Client builder. All flags are off by default, as in the API itself.
 #[derive(Debug, Clone)]
 pub struct IsDayOffBuilder {
     base_url: Option<String>,
@@ -118,59 +117,59 @@ impl Default for IsDayOffBuilder {
 }
 
 impl IsDayOffBuilder {
-    /// Другой адрес сервиса (по умолчанию `https://isdayoff.ru/`).
-    /// Полезно для тестов с локальным mock-сервером или для прокси.
+    /// Alternative service address (default `https://isdayoff.ru/`).
+    /// Useful for tests with a local mock server or for a proxy.
     pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = Some(base_url.into());
         self
     }
 
-    /// Страна (параметр `cc`). По умолчанию — Россия.
+    /// Country (the `cc` parameter). Defaults to Russia.
     pub fn country(mut self, country: Country) -> Self {
         self.country = country;
         self
     }
 
-    /// Помечать сокращённые предпраздничные дни как [`DayType::Shortened`].
+    /// Mark shortened pre-holiday days as [`DayType::Shortened`].
     pub fn pre(mut self, enabled: bool) -> Self {
         self.pre = enabled;
         self
     }
 
-    /// Считать неделю шестидневной.
+    /// Use a six-day working week.
     pub fn six_day_week(mut self, enabled: bool) -> Self {
         self.sd = enabled;
         self
     }
 
-    /// Помечать «нерабочие дни» 2020 года как [`DayType::Covid`].
+    /// Mark the 2020 COVID non-working days as [`DayType::Covid`].
     pub fn covid(mut self, enabled: bool) -> Self {
         self.covid = enabled;
         self
     }
 
-    /// Помечать праздники как [`DayType::Holiday`], а не как обычный выходной.
+    /// Mark public holidays as [`DayType::Holiday`] instead of a plain day off.
     pub fn holiday(mut self, enabled: bool) -> Self {
         self.holiday = enabled;
         self
     }
 
-    /// Таймаут на весь запрос (по умолчанию 30 секунд).
+    /// Timeout for the whole request (default 30 seconds).
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
-    /// Комментарий в заголовке `User-Agent`, например как связаться с
-    /// автором приложения. Автор isdayoff.ru просит его указывать.
+    /// Comment for the `User-Agent` header, e.g. how to contact the
+    /// application's author. The isdayoff.ru author asks clients to set it.
     ///
-    /// Итоговый заголовок: `isdayoff-rust-lib/<версия> (+<репозиторий>; <комментарий>)`.
+    /// Resulting header: `isdayoff-rust-lib/<version> (+<repository>; <comment>)`.
     pub fn user_agent_comment(mut self, comment: impl Into<String>) -> Self {
         self.user_agent_comment = Some(comment.into());
         self
     }
 
-    /// Собирает асинхронный клиент.
+    /// Builds the async client.
     pub fn build(self) -> Result<IsDayOff, Error> {
         let (config, user_agent, timeout) = self.into_parts()?;
         let http = reqwest::Client::builder()
@@ -180,7 +179,7 @@ impl IsDayOffBuilder {
         Ok(IsDayOff { config, http })
     }
 
-    /// Общая для async и blocking часть сборки: валидирует настройки.
+    /// Build step shared by async and blocking clients: validates the settings.
     pub(crate) fn into_parts(self) -> Result<(Config, String, Duration), Error> {
         let base_url = self.base_url.as_deref().unwrap_or(core::DEFAULT_BASE_URL);
         let config = Config {

@@ -1,56 +1,56 @@
-//! Единый тип ошибки крейта.
+//! The crate-wide error type.
 
-/// Ошибки, которые возвращает библиотека.
+/// Errors returned by this library.
 ///
-/// `#[non_exhaustive]` позволяет добавлять новые варианты в минорных
-/// версиях, не ломая пользователей: в их `match` обязателен `_ =>`.
+/// `#[non_exhaustive]` lets new variants be added in minor releases without
+/// breaking users: their `match` must include a `_ =>` arm.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
-    /// Сетевая ошибка, таймаут, ошибка TLS и т.п.
+    /// Network error, timeout, TLS failure, etc.
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
-    /// Адрес, переданный в [`IsDayOffBuilder::base_url`](crate::IsDayOffBuilder::base_url),
-    /// не является корректным URL.
+    /// The address passed to [`IsDayOffBuilder::base_url`](crate::IsDayOffBuilder::base_url)
+    /// is not a valid URL.
     #[error("invalid base URL: {0}")]
     InvalidBaseUrl(#[from] url::ParseError),
 
-    /// Код `100`: API считает дату или страну неверной.
+    /// Code `100`: the API considers the date or country invalid.
     #[error("bad date or country (API returned 100)")]
     BadRequest,
 
-    /// Код `101`: у сервиса нет данных за этот период.
+    /// Code `101`: the service has no data for this period.
     #[error("no data for this period (API returned 101)")]
     NotFound,
 
-    /// Код `199`: внутренняя ошибка сервиса.
+    /// Code `199`: internal service error.
     #[error("isdayoff service error (API returned 199)")]
     ServiceError,
 
-    /// Начало диапазона позже его конца, или дата вне диапазона `chrono`.
+    /// The range start is after its end, or a date is outside `chrono`'s range.
     #[error("invalid date range: {0}")]
     InvalidRange(&'static str),
 
-    /// Ответ пришёл, но не похож ни на данные, ни на известный код ошибки.
+    /// A response arrived but is neither data nor a known error code.
     #[error("unexpected response (HTTP {status}): {body:?}")]
     UnexpectedResponse {
-        /// HTTP-статус ответа.
+        /// HTTP status of the response.
         status: u16,
-        /// Тело ответа (обрезанное до разумной длины).
+        /// Response body (truncated to a reasonable length).
         body: String,
     },
 
-    /// В ответе встретился неизвестный символ.
+    /// The response contains an unknown character.
     #[error("unknown day type code: {0:?}")]
     UnknownDayType(char),
 
-    /// Количество дней в ответе не совпало с запрошенным периодом.
+    /// The number of days in the response doesn't match the requested period.
     #[error("expected {expected} days in response, got {actual}")]
     LengthMismatch {
-        /// Сколько дней ожидалось.
+        /// Expected number of days.
         expected: usize,
-        /// Сколько символов пришло.
+        /// Number of characters received.
         actual: usize,
     },
 }

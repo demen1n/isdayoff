@@ -10,15 +10,15 @@ documentation = "https://docs.rs/isdayoff"
 readme = "README.md"
 keywords = ["calendar", "holidays", "workday", "isdayoff", "russia"]
 categories = ["api-bindings", "date-and-time"]
-# В архив для crates.io кладём только то, что нужно для сборки и документации.
-include = ["src/**/*", "examples/**/*", "tests/**/*", "README.md", "LICENSE-*", "Cargo.toml"]
+# Ship only what is needed to build and document the crate.
+include = ["/src/**/*", "/examples/**/*", "/tests/**/*", "/README.md", "/LICENSE-*", "/Cargo.toml"]
 
 [features]
 default = ["rustls"]
-# TLS-бэкенд. Нужен ровно один (API работает только по https).
+# TLS backend. Enable one (the API is HTTPS-only).
 rustls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
-# Синхронный клиент `isdayoff::blocking::IsDayOff`.
+# Synchronous client `isdayoff::blocking::IsDayOff`.
 blocking = ["reqwest/blocking"]
 
 [dependencies]
@@ -29,11 +29,11 @@ url = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-# Для примеров: `Local::now()` требует фичу `clock`.
+# For examples: `Local::now()` needs the `clock` feature.
 chrono = { version = "0.4", features = ["clock"] }
 
 [package.metadata.docs.rs]
-# docs.rs соберёт документацию со всеми фичами, включая `blocking`.
+# Build docs.rs documentation with all features, including `blocking`.
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
@@ -42,5 +42,5 @@ name = "blocking"
 required-features = ["blocking"]
 
 [lints.rust]
-# `docsrs` выставляется только при сборке на docs.rs — объявляем, чтобы не было предупреждения.
+# `docsrs` is only set when building on docs.rs; declare it to avoid a warning.
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(docsrs)"] }

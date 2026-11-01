@@ -1,4 +1,4 @@
-//! Тесты blocking-клиента. Весь файл компилируется только с `--features blocking`.
+//! Blocking client tests. The whole file compiles only with `--features blocking`.
 #![cfg(feature = "blocking")]
 
 mod common;

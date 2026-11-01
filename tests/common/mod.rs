@@ -1,25 +1,24 @@
-// Каждый файл в tests/ — отдельный крейт, и не каждый использует все
-// хелперы отсюда. Без этого получим ложные предупреждения dead_code.
+// Every file in tests/ is a separate crate and not all of them use every
+// helper here; without this we'd get spurious dead_code warnings.
 #![allow(dead_code)]
 
-//! Крошечный HTTP-сервер для тестов — без внешних зависимостей.
+//! A tiny HTTP server for tests, with no external dependencies.
 //!
-//! Отвечает заранее заданными (статус, тело) по очереди и запоминает, какие
-//! запросы к нему пришли (строка запроса + заголовки), чтобы тест мог их
-//! проверить. Работает в отдельном потоке, поэтому подходит и для async-,
-//! и для blocking-клиента.
+//! Replies with predefined (status, body) pairs in order and records the
+//! requests it received (request line + headers) so a test can inspect them.
+//! Runs on its own thread, so it works for both the async and blocking clients.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
 
-/// Что увидел сервер.
+/// What the server saw.
 #[derive(Debug)]
 pub struct Recorded {
-    /// Например `GET /api/getdata?year=2025&cc=ru HTTP/1.1`.
+    /// E.g. `GET /api/getdata?year=2025&cc=ru HTTP/1.1`.
     pub request_line: String,
-    /// Заголовки в нижнем регистре: `("user-agent", "...")`.
+    /// Lower-cased headers: `("user-agent", "...")`.
     pub headers: Vec<(String, String)>,
 }
 
@@ -38,9 +37,9 @@ pub struct MockServer {
 }
 
 impl MockServer {
-    /// Запускает сервер, который ответит на `responses.len()` запросов.
+    /// Starts a server that will answer `responses.len()` requests.
     pub fn start(responses: Vec<(u16, &'static str)>) -> Self {
-        // Порт 0 — «дай любой свободный»: тесты не мешают друг другу.
+        // Port 0 means "any free port", so parallel tests don't collide.
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base_url = format!("http://{}/", listener.local_addr().unwrap());
         let (tx, rx) = mpsc::channel();
@@ -58,7 +57,7 @@ impl MockServer {
                     reader.read_line(&mut line).unwrap();
                     let line = line.trim_end();
                     if line.is_empty() {
-                        break; // пустая строка — конец заголовков (у GET нет тела)
+                        break; // empty line ends the headers (GET has no body)
                     }
                     if let Some((k, v)) = line.split_once(':') {
                         headers.push((k.trim().to_ascii_lowercase(), v.trim().to_string()));
@@ -83,7 +82,7 @@ impl MockServer {
         }
     }
 
-    /// Следующий принятый запрос.
+    /// The next received request.
     pub fn next_request(&self) -> Recorded {
         self.requests
             .recv_timeout(std::time::Duration::from_secs(5))
